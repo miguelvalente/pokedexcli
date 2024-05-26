@@ -1,3 +1,3 @@
-module gihub.com/miguelvalente/pokedexcli
+module pokedexcli
 
 go 1.22.2
