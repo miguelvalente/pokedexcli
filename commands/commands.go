@@ -6,6 +6,9 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"time"
+
+	"github.com/miguelvalente/pokedexcli/internal/pokecache"
 )
 
 type cliCommand struct {
@@ -40,27 +43,36 @@ type MapResponse struct {
 	} `json:"results"`
 }
 
-func commandMap(config *mapConfig) {
+func commandMap(config *mapConfig, cache *pokecache.Cache) {
 	url := "https://pokeapi.co/api/v2/location-area/"
+
 	if config.Next != "" {
 		url = config.Next
 	}
 
-	resp, err := http.Get(url)
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
-	}
-	defer resp.Body.Close()
+	body := []byte{}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Println("Error reading response:", err)
-		return
+	value, exists := cache.Get(url)
+	if exists {
+		body = value
+	} else {
+		resp, err := http.Get(url)
+		if err != nil {
+			fmt.Println("Error:", err)
+			return
+		}
+		defer resp.Body.Close()
+
+		body, err = io.ReadAll(resp.Body)
+		if err != nil {
+			fmt.Println("Error reading response:", err)
+			return
+		}
+		cache.Add(url, body)
 	}
 
 	var data MapResponse
-	err = json.Unmarshal(body, &data)
+	err := json.Unmarshal(body, &data)
 	if err != nil {
 		fmt.Println("Error unmarshalling JSON:", err)
 		return
@@ -78,29 +90,33 @@ func commandMap(config *mapConfig) {
 	}
 }
 
-func commandMapb(config *mapConfig) {
+func commandMapb(config *mapConfig, cache *pokecache.Cache) {
 	if config.Previous == "" {
 		fmt.Println("No previous location to visit")
 		return
 	}
 
-	resp, err := http.Get(config.Previous)
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
-	}
+	body, found := cache.Get(config.Previous)
+	if !found {
+		// fmt.Println("Cache miss for key:", config.Previous)
 
-	defer resp.Body.Close()
+		resp, err := http.Get(config.Previous)
+		if err != nil {
+			fmt.Println("Error:", err)
+			return
+		}
+		defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Println("Error reading response:", err)
-		return
+		body, err = io.ReadAll(resp.Body)
+		if err != nil {
+			fmt.Println("Error reading response:", err)
+			return
+		}
+		cache.Add(config.Previous, body)
 	}
 
 	var data MapResponse
-	err = json.Unmarshal(body, &data)
-	if err != nil {
+	if err := json.Unmarshal(body, &data); err != nil {
 		fmt.Println("Error unmarshalling JSON:", err)
 		return
 	}
@@ -109,31 +125,29 @@ func commandMapb(config *mapConfig) {
 		fmt.Println(res.Name)
 	}
 
-	// config.Previous = *data.Previous
-	// config.Next = data.Next
-	// Update the Config with the Next and Previous URLs
 	config.Next = data.Next
 	if data.Previous != nil {
 		config.Previous = *data.Previous
 	} else {
 		config.Previous = ""
 	}
-
 }
 
-func commandMapFunc(config *mapConfig) func() {
+func commandMapFunc(config *mapConfig, cache *pokecache.Cache) func() {
 	return func() {
-		commandMap(config)
+		commandMap(config, cache)
 	}
 }
 
-func commandMapbFunc(config *mapConfig) func() {
+func commandMapbFunc(config *mapConfig, cache *pokecache.Cache) func() {
 	return func() {
-		commandMapb(config)
+		commandMapb(config, cache)
 	}
 }
 func GetCommands() map[string]cliCommand {
 	config := &mapConfig{}
+	const baseTime = 100 * time.Second
+	cache := pokecache.NewCache(baseTime)
 
 	return map[string]cliCommand{
 		"help": {
@@ -149,12 +163,12 @@ func GetCommands() map[string]cliCommand {
 		"map": {
 			name:        "map",
 			description: "List nexy available areas",
-			Callback:    commandMapFunc(config),
+			Callback:    commandMapFunc(config, cache),
 		},
 		"mapb": {
 			name:        "mapb",
 			description: "List previous available areas",
-			Callback:    commandMapbFunc(config),
+			Callback:    commandMapbFunc(config, cache),
 		},
 	}
 }

@@ -4,7 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"pokedexcli/commands"
+
+	"github.com/miguelvalente/pokedexcli/commands"
 )
 
 func startRepl() {
