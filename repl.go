@@ -14,13 +14,16 @@ import (
 func startRepl() {
 	commands_ := commands.GetCommands()
 	scanner := bufio.NewScanner(os.Stdin)
-	config := &commands.MapConfig{}
+	config := &commands.Config{}
 	const baseTime = 100 * time.Second
 	cache := pokecache.NewCache(baseTime)
+	pokedex := &commands.Pokedex{
+		MyPokemons: make(map[string]*commands.Pokemon),
+	}
 
 	fmt.Println("Welcome to Pokedex!")
 	fmt.Println("Usage:")
-	commands_["help"].Callback("", config, cache)
+	commands_["help"].Callback("", config, cache, pokedex)
 	for {
 		fmt.Print("Pokedex > ")
 		if scanner.Scan() {
@@ -37,7 +40,7 @@ func startRepl() {
 				extra = fields[1]
 			}
 			if cmd, found := commands_[commandName]; found {
-				cmd.Callback(extra, config, cache)
+				cmd.Callback(extra, config, cache, pokedex)
 			} else {
 				fmt.Println("Unknown command: ", input)
 			}
